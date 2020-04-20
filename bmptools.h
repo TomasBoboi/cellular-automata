@@ -10,6 +10,9 @@
 #define COLOR_PALETTE			0
 #define IMPORTANT_COLORS		0
 
+#define COLOR_BLACK	0
+#define COLOR_WHITE	255
+
 void writeHeader(int fd, int32_t width, int32_t height);
 void writeInfoHeader(int fd, int32_t width, int32_t height);
 void writeColorPalette(int fd);

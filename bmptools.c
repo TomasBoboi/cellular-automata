@@ -111,11 +111,14 @@ void writeColorPalette(int fd)
 
 void writeImage(int fd, uint8_t **pixel_data, int32_t width, int32_t height)
 {
-	while(width % 4 != 0)
-		width++;
+	int32_t oldwidth = width;
+	while(width % 4 != 0) width++;
+	for(int32_t column = oldwidth; column < width; column++)
+		for(int32_t row = 0; row < height; row++)
+			pixel_data[row][column] = COLOR_WHITE;
 	
-	writeHeader(fd, width, height);
-	writeInfoHeader(fd, width, height);
+	writeHeader(fd, oldwidth, height);
+	writeInfoHeader(fd, oldwidth, height);
 	writeColorPalette(fd);
 	
 	int32_t row, column;
