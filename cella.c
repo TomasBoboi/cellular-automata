@@ -11,203 +11,389 @@
 
 #include "bmptools.h"
 
-#define SEED_ARG		1
-#define ITERATIONS_ARG	2
-#define RULE_ARG		3
-#define OUTPUT_FILE_ARG	4
+#define TRUE	1u
+#define FALSE	0u
 
-void error_message(char *err);
+#define U8_ARR_LENGTH(arr) (uint8_t)((sizeof(arr))/(sizeof((arr)[0])))
 
-void grab_rule(char *rule_s);
-void calculate_image_dimensions(char *seed_s, char *iterations_s);
-void grab_seed(char *seed_s);
-void allocate_pixel_data();
-void initialize_pixel_data();
-void open_output_file(char *file_name);
+#define DEFAULT_WIDTH		100
+#define DEFAULT_HEIGHT		100
+#define DEFAULT_RULE		30
+
+#define FIRST_ROW		0
+#define FIRST_COLUMN	0
+
+typedef struct{
+	uint8_t	force_width;
+	int32_t	f_width;
+
+	uint8_t	force_height;
+	int32_t	f_height;
+
+	uint8_t	force_output_name;
+	char	*f_output_file;
+
+	uint8_t	force_iterations;
+	uint8_t f_iterations;
+
+	uint8_t force_seed;
+	char	seedPos;
+	char	*f_seed;
+
+	uint8_t	force_rule;
+	uint8_t	f_rule;
+} config_t;
+
+void errorMessage(char *err);
+
 void initialize(int argc, char *argv[]);
+void parseParameters(int argc, char *argv[]);
+void determineRule();
+void determineImageDimensions();
+void determineSeed();
+void determineIterations();
+void allocatePixelData();
+void initializePixelData();
+void determineOutputFileName();
+void openOutputFile();
 
-void run_simulation();
-uint8_t compute_cell(int32_t row, int32_t column);
-uint8_t get_rule(uint8_t north_west, uint8_t north, uint8_t north_east);
+void	runSimulation();
+uint8_t	computeCell(int32_t row, int32_t column);
+uint8_t	computeRuleResult(uint8_t northWest, uint8_t north, uint8_t northEast);
 
-void close_output_file();
 void terminate();
+void closeOutputFile();
+void freeMemory();
 
-int32_t width, height;
-uint8_t **pixel_data;
-uint8_t *seed;
-uint8_t rule[8];
-int output_file;
+config_t	configuration = {0};
+int32_t		width, height;
+char		*outputFileName;
+int			outputFileDescriptor;
+uint32_t	iterations;
+uint8_t		*seed;
+int32_t		seedLength;
+uint8_t		**pixelData;
+uint8_t		rule[8];
 
 int main(int argc, char *argv[])
 {	
 	initialize(argc, argv);
 
-	run_simulation();
+	runSimulation();
 
-	writeImage(output_file, pixel_data, width, height);
+	writeImage(outputFileDescriptor, pixelData, width, height);
 
 	terminate();
 	
 	return 0;
 }
 
-void error_message(char *err)
-{
-	printf("Error: %s\n", err);
-	exit(EXIT_FAILURE);
-}
-/* BEGIN INITIALIZE */
+/****** BEGIN INITIALIZE ******/
 void initialize(int argc, char *argv[])
 {
-	grab_rule(argv[RULE_ARG]);
-	calculate_image_dimensions(argv[SEED_ARG], argv[ITERATIONS_ARG]);
-	grab_seed(argv[SEED_ARG]);
-	allocate_pixel_data();
-	initialize_pixel_data();
+	printf("Initializing... \n");
 
-	if(OUTPUT_FILE_ARG >= argc)
-	{
-		char temp_file_name[32];
-		strcpy(temp_file_name, "output_");
+	printf("\t");
+	parseParameters(argc, argv);
+	
+	printf("\t");
+	determineRule();
 
-		time_t current_time = time(0);
-		struct tm* current_time_info = localtime(&current_time);
-		char buf[16];
-		sprintf(buf, "%02d%02d%02d", current_time_info -> tm_hour, current_time_info -> tm_min, current_time_info -> tm_sec);
-		strcat(temp_file_name, buf);
+	printf("\t");
+	determineImageDimensions();
 
-		strcat(temp_file_name, ".bmp");
-		open_output_file(temp_file_name);
-	}
-	else
-		open_output_file(argv[OUTPUT_FILE_ARG]);
+	printf("\t");
+	determineSeed();
+
+	printf("\t");
+	determineIterations();
+
+	printf("\t");
+	allocatePixelData();
+
+	printf("\t");
+	initializePixelData();
+
+	printf("\t");
+	determineOutputFileName();
+
+	printf("\t");
+	openOutputFile();
 }
 
-void grab_rule(char *rule_s)
+void parseParameters(int argc, char *argv[])
 {
-	printf("Grabbing rule... ");
+	printf("Parsing the parameters... ");
 
-	uint8_t rule_u8 = (uint8_t)atoi(rule_s);
+	uint8_t arg_index;
+
+	for(arg_index = 1; arg_index < argc; arg_index += 2)
+		switch(argv[arg_index][1])
+		{
+			case 'w':
+				configuration.force_width = TRUE;
+				configuration.f_width = atoi(argv[arg_index + 1]);
+				break;
+			case 'h':
+				configuration.force_height = TRUE;
+				configuration.f_height = atoi(argv[arg_index + 1]);
+				break;
+			case 'o':
+				configuration.force_output_name = TRUE;
+				configuration.f_output_file = argv[arg_index + 1];
+				break;
+			case 'i':
+				configuration.force_iterations = TRUE;
+				configuration.f_iterations = atoi(argv[arg_index + 1]);
+				break;
+			case 's':
+				switch(argv[arg_index + 1][0])
+				{
+					case 'l': case 'L':
+						configuration.seedPos = 'l';
+						break;
+					case 'r': case 'R':
+						configuration.seedPos = 'r';
+						break;
+					case 'c': case 'C':
+						configuration.seedPos = 'c';
+						break;
+					default:
+						configuration.force_seed = TRUE;
+						configuration.f_seed = argv[arg_index + 1];
+						break;
+				}
+				break;
+			case 'r':
+				configuration.force_rule = TRUE;
+				configuration.f_rule = atoi(argv[arg_index + 1]);
+				break;
+			default:
+				errorMessage("invalid parameter");
+				break;
+		}
+	
+	printf("done\n");
+}
+
+void determineRule()
+{
+	printf("Determining the rule... ");
+
+	uint8_t currentRule;
+	if(TRUE == configuration.force_rule)
+		currentRule = configuration.f_rule;
+	else
+		currentRule = DEFAULT_RULE;
 
 	for(int32_t count = 7; count >= 0; count--)
 	{
-		rule[count] = (rule_u8 % 2 != 0) ? COLOR_BLACK : COLOR_WHITE;
-		rule_u8 /= 2;
+		rule[count] = (currentRule % 2 != 0) ? COLOR_BLACK : COLOR_WHITE;
+		currentRule /= 2;
 	}
 
 	printf("done\n");
 }
 
-void calculate_image_dimensions(char *seed_s, char *iterations_s)
+void determineImageDimensions()
 {
-	printf("Calculating image dimensions... ");
+	printf("Determining the image dimensions... ");
 
-	width = strlen(seed_s);
-	height = atoi(iterations_s) + 1;
+	if(TRUE == configuration.force_width)
+		width = configuration.f_width;
+	else
+		width = DEFAULT_WIDTH;
+	
+	if(TRUE == configuration.force_height)
+		height = configuration.f_height;
+	else
+		height = DEFAULT_HEIGHT;
 
 	printf("done\n");
 }
 
-void grab_seed(char *seed_s)
+void determineSeed()
 {
-	printf("Grabbing seed... ");
+	printf("Determining the seed... ");
 
-	if(strlen(seed_s) != width)
-		error_message("length of seed is incorrect");
-	
-	seed = (uint8_t*)malloc(width * sizeof(uint8_t));
-	for(uint8_t column = 0; column < width; column++)
-		seed[column] = ((seed_s[column] == '0') ? COLOR_WHITE : COLOR_BLACK);
+	int32_t index;
+
+	if(TRUE == configuration.force_seed)
+	{
+		seed = (uint8_t *)malloc(strlen(configuration.f_seed) * sizeof(uint8_t));
+		seedLength = strlen(configuration.f_seed);
+
+		for(index = 0; index < strlen(configuration.f_seed); index++)
+			seed[index] = (configuration.f_seed[index] == '0') ? COLOR_WHITE : COLOR_BLACK;
+	}
+	else
+	{
+		seed = (uint8_t *)malloc(width * sizeof(uint8_t));
+		seedLength = width;
+
+		for(index = 0; index < width; index++)
+			if(	('l' == configuration.seedPos && FIRST_COLUMN == index) || 
+				('r' == configuration.seedPos && width - 1 == index) || 
+				('l' != configuration.seedPos && 'r' != configuration.seedPos && ((width + 1) / 2) == index))
+				seed[index] = COLOR_BLACK;
+			else
+				seed[index] = COLOR_WHITE;
+	}
 	
 	printf("done\n");
 }
 
-void allocate_pixel_data()
+void determineIterations()
+{
+	printf("Determining iteration number... ");
+
+	if(TRUE == configuration.force_iterations)
+		iterations = configuration.f_iterations;
+	else
+		iterations = height;
+
+	printf("done\n");
+}
+
+void allocatePixelData()
 {
 	printf("Allocating pixel data... ");
 
-	pixel_data = (uint8_t**)malloc(height * sizeof(uint8_t*));
+	pixelData = (uint8_t **)malloc(height * sizeof(uint8_t *));
 
 	for(int32_t row = 0; row < height; row++)
-		pixel_data[row] = (uint8_t*)malloc(width * sizeof(uint8_t));
+		pixelData[row] = (uint8_t *)malloc(width * sizeof(uint8_t));
 	
 	printf("done\n");
 }
 
-void initialize_pixel_data()
+void initializePixelData()
 {
+	printf("Initializing pixel data... ");
+
 	int32_t row, column;
 
 	for(row = 0; row < height; row++)
 		for(column = 0; column < width; column++)
-			pixel_data[row][column] = COLOR_WHITE;
+			pixelData[row][column] = COLOR_WHITE;
 	
-	for(column = 0; column < width; column++)
-		pixel_data[0][column] = seed[column];
+	for(column = 0; column < seedLength; column++)
+		pixelData[FIRST_ROW][column] = seed[column];
+	
+	printf("done\n");
 }
 
-void open_output_file(char *file_name)
+void determineOutputFileName()
+{
+	printf("Determining output file name... ");
+
+	if(TRUE == configuration.force_output_name)
+	{
+		outputFileName = (char *)malloc(strlen(configuration.f_output_file) * sizeof(char));
+
+		outputFileName = configuration.f_output_file;
+	}
+	else
+	{
+		outputFileName = (char *)malloc(18 * sizeof(char));
+		strcpy(outputFileName, "output_");
+
+		time_t currentTime = time(0);
+		struct tm* currentTimeInfo = localtime(&currentTime);
+		char buf[7];
+		sprintf(buf, "%02d%02d%02d", currentTimeInfo -> tm_hour, currentTimeInfo -> tm_min, currentTimeInfo -> tm_sec);
+		strcat(outputFileName, buf);
+
+		strcat(outputFileName, ".bmp");
+	}
+
+	printf("done\n");
+}
+
+void openOutputFile()
 {
 	printf("Creating output file... ");
 
-	if((output_file = open(file_name, O_CREAT | O_WRONLY | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO)) < 0)
-		error_message("creating output file");
+	if((outputFileDescriptor = open(outputFileName, O_CREAT | O_WRONLY | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO)) < 0)
+		errorMessage("creating output file");
 	
 	printf("done\n");
 }
-/* END INITIALIZE */
+/****** END INITIALIZE ******/
 
-/* BEGIN SIMULATION */
-void run_simulation()
+/****** BEGIN SIMULATION ******/
+void runSimulation()
 {
+	printf("Running simulation...\n");
 	int32_t row, column;
 
-	for(row = 1; row < height; row++)
+	for(row = 1; row < iterations; row++)
+	{
+		if(row == iterations / 4)
+			printf("\t25%%\n");
+		else if(row == iterations / 2)
+			printf("\t50%%\n");
+		else if(row == 3 * iterations / 4)
+			printf("\t75%%\n");
+		
 		for(column = 0; column < width; column++)
-			pixel_data[row][column] = compute_cell(row, column);
+			pixelData[row][column] = computeCell(row, column);
+	}
+	printf("\t100%%\n");
 }
 
-uint8_t compute_cell(int32_t row, int32_t column)
+uint8_t computeCell(int32_t row, int32_t column)
 {
-	if(0 == column)
-		return get_rule(pixel_data[row - 1][width - 1], pixel_data[row - 1][column], pixel_data[row - 1][column + 1]);
+	if(FIRST_COLUMN == column)
+		return computeRuleResult(pixelData[row - 1][width - 1], pixelData[row - 1][column], pixelData[row - 1][column + 1]);
 	else if(column == width - 1)
-		return get_rule(pixel_data[row - 1][column - 1], pixel_data[row - 1][column], pixel_data[row - 1][0]);
+		return computeRuleResult(pixelData[row - 1][column - 1], pixelData[row - 1][column], pixelData[row - 1][FIRST_COLUMN]);
 	else
-		return get_rule(pixel_data[row - 1][column - 1], pixel_data[row - 1][column], pixel_data[row - 1][column + 1]);
+		return computeRuleResult(pixelData[row - 1][column - 1], pixelData[row - 1][column], pixelData[row - 1][column + 1]);
 }
 
-uint8_t get_rule(uint8_t north_west, uint8_t north, uint8_t north_east)
+uint8_t computeRuleResult(uint8_t northWest, uint8_t north, uint8_t northEast)
 {
 	uint8_t index = 0;
 
-	if(COLOR_WHITE != north_east)
-		index |= 1;
-	if(COLOR_WHITE != north)
-		index |= 2;
-	if(COLOR_WHITE != north_west)
-		index |= 4;
+	if(COLOR_WHITE != northEast)	index |= 1;
+	if(COLOR_WHITE != north)		index |= 2;
+	if(COLOR_WHITE != northWest)	index |= 4;
 	
 	return rule[7 - index];
 }
-/* END SIMULATION */
+/****** END SIMULATION ******/
 
-/* BEGIN TERMINATE */
+/****** BEGIN TERMINATE ******/
 void terminate()
 {
-	close_output_file();
-	free(pixel_data);
-	free(seed);
+	printf("Terminating program... \n");
+
+	printf("\t");
+	closeOutputFile();
+
+	printf("\t");
+	freeMemory();
 }
 
-void close_output_file()
+void closeOutputFile()
 {
 	printf("Closing output file... ");
 
-	if(close(output_file) < 0)
-		error_message("closing output file");
+	if(close(outputFileDescriptor) < 0)
+		errorMessage("closing output file");
 	
 	printf("done\n");
 }
-/* END TERMINATE */
+
+void freeMemory()
+{
+	printf("Freeing allocated memory... ");
+
+	//free(outputFileName);
+	free(seed);
+	free(pixelData);
+
+	printf("done\n");
+}
+/****** END TERMINATE ******/

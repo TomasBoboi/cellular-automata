@@ -2,31 +2,32 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
+
 #include "bmptools.h"
 
 typedef struct __attribute__((__packed__)){
-	uint16_t	file_type;
-	uint32_t	file_size;
+	uint16_t	fileType;
+	uint32_t	fileSize;
 	uint16_t	reserved1;
 	uint16_t	reserved2;
-	uint32_t	pixel_offset;
-} bitmap_file_header;
+	uint32_t	pixelOffset;
+} bitmapFileHeader;
 
 typedef struct __attribute__((__packed__)){
-	uint32_t	header_size;
-	int32_t		bitmap_width;
-	int32_t		bitmap_height;
-	uint16_t	color_planes;
-	uint16_t	color_depth;
-	uint32_t	compression_method;
-	uint32_t	image_size;
-	int32_t		horizontal_resolution;
-	int32_t		vertical_resolution;
-	uint32_t	color_palette;
-	uint32_t	important_colors;
-} BITMAPINFOHEADER;
+	uint32_t	infoHeaderSize;
+	int32_t		bitmapWidth;
+	int32_t		bitmapHeight;
+	uint16_t	colorPlanes;
+	uint16_t	colorDepth;
+	uint32_t	compressionMethod;
+	uint32_t	rawImageSize;
+	int32_t		horizontalResolution;
+	int32_t		verticalResolution;
+	uint32_t	colorPalette;
+	uint32_t	importantColors;
+} bitmapInfoHeader;
 
-uint16_t lite2bige_16(uint16_t n)
+uint16_t littleEndianToBigEndian_u16(uint16_t n)
 {
 	uint8_t hi = (n) >> 8;
 	uint8_t lo = (n) & 0xFF;
@@ -34,100 +35,118 @@ uint16_t lite2bige_16(uint16_t n)
 	return (lo << 8) | hi;
 }
 
-uint32_t lite2bige_32(uint32_t n)
+uint32_t littleEndianToBigEndian_u32(uint32_t n)
 {
 	uint16_t hi = (n) >> 16;
 	uint16_t lo = (n) & 0x0000FFFF;
 	
-	hi = lite2bige_16(hi);
-	lo = lite2bige_16(lo);
+	hi = littleEndianToBigEndian_u16(hi);
+	lo = littleEndianToBigEndian_u16(lo);
 	
 	return (lo << 16) | hi;
 }
 
-void writeHeader(int fd, int32_t width, int32_t height)
+void errorMessage(char *err)
 {
-	bitmap_file_header bfh;
-	
-	bfh.file_type		=	lite2bige_16(BITMAP_FILE_TYPE);
-	bfh.file_size		=	width * height + BITMAP_HEADER_SIZE + BITMAP_INFO_HEADER_SIZE + (BITMAP_PALETTE_SIZE * 4);
-	bfh.reserved1		=	0x0000;
-	bfh.reserved2		=	0x0000;
-	bfh.pixel_offset	=	BITMAP_HEADER_SIZE + BITMAP_INFO_HEADER_SIZE + BITMAP_PALETTE_SIZE;
-	
-	if(write(fd, &bfh, sizeof(bfh)) < 0)
-	{
-		printf("Error writing the bitmap file header\n");
-		exit(EXIT_FAILURE);
-	}
+	printf("Error: %s\n", err);
+	exit(EXIT_FAILURE);
 }
 
-void writeInfoHeader(int fd, int32_t width, int32_t height)
+void writeHeader(int outputFileDescriptor, int32_t width, int32_t height)
 {
-	BITMAPINFOHEADER bih;
+	printf("Writing bitmap file header... ");
+
+	bitmapFileHeader bfh;
 	
-	bih.header_size				=	BITMAP_INFO_HEADER_SIZE;
-	bih.bitmap_width			=	width;
-	bih.bitmap_height			=	height;
-	bih.color_planes			=	COLOR_PLANES;
-	bih.color_depth				=	COLOR_DEPTH;
-	bih.compression_method		=	COMPRESSION_METHOD;
-	bih.image_size				=	width * height * COLOR_DEPTH / 8;
-	bih.horizontal_resolution	=	HORIZONTAL_RESOLUTION;
-	bih.vertical_resolution		=	VERTICAL_RESOLUTION;
-	bih.color_palette			=	COLOR_PALETTE;
-	bih.important_colors		=	IMPORTANT_COLORS;
+	bfh.fileType	=	littleEndianToBigEndian_u16(BITMAP_FILE_TYPE);
+	bfh.fileSize	=	width * height + BITMAP_HEADER_SIZE + BITMAP_INFO_HEADER_SIZE + (BITMAP_PALETTE_SIZE * 4);
+	bfh.reserved1	=	0x0000;
+	bfh.reserved2	=	0x0000;
+	bfh.pixelOffset	=	BITMAP_HEADER_SIZE + BITMAP_INFO_HEADER_SIZE + BITMAP_PALETTE_SIZE;
 	
-	if(write(fd, &bih, sizeof(bih)) < 0)
-	{
-		printf("Error writing the bitmap file header\n");
-		exit(EXIT_FAILURE);
-	}
+	if(write(outputFileDescriptor, &bfh, sizeof(bfh)) < 0)
+		errorMessage("writing the bitmap file header");
+	
+	printf("done\n");
 }
 
-void writeColorPalette(int fd)
+void writeInfoHeader(int outputFileDescriptor, int32_t width, int32_t height)
 {
-	uint16_t color;
-	uint32_t actual_color;
+	printf("Writing bitmap information header... ");
+
+	bitmapInfoHeader bih;
 	
-	for(color = 0;color < 256;color++)
+	bih.infoHeaderSize			=	BITMAP_INFO_HEADER_SIZE;
+	bih.bitmapWidth				=	width;
+	bih.bitmapHeight			=	height;
+	bih.colorPlanes				=	COLOR_PLANES;
+	bih.colorDepth				=	COLOR_DEPTH;
+	bih.compressionMethod		=	COMPRESSION_METHOD;
+	bih.rawImageSize			=	width * height * COLOR_DEPTH / 8;
+	bih.horizontalResolution	=	HORIZONTAL_RESOLUTION;
+	bih.verticalResolution		=	VERTICAL_RESOLUTION;
+	bih.colorPalette			=	COLOR_PALETTE;
+	bih.importantColors			=	IMPORTANT_COLORS;
+	
+	if(write(outputFileDescriptor, &bih, sizeof(bih)) < 0)
+		errorMessage("writing the bitmap information header");
+	
+	printf("done\n");
+}
+
+void writeColorPalette(int outputFileDescriptor)
+{
+	printf("Writing the color palette... ");
+
+	uint32_t color, actualColor;
+	
+	for(color = 0; color < 256; color++)
 	{
-		actual_color = color;
-		actual_color <<= 8;
-		actual_color |= color;
-		actual_color <<= 8;
-		actual_color |= color;
-		actual_color <<= 8;
-		actual_color &= 0xFFFFFF00;
-		actual_color = lite2bige_32(actual_color);
+		actualColor = color;	actualColor <<= 8;
+		actualColor |= color;	actualColor <<= 8;
+		actualColor |= color;	actualColor <<= 8;
+		actualColor &= 0xFFFFFF00;
+		actualColor = littleEndianToBigEndian_u32(actualColor);
 		
-		if(write(fd, &actual_color, 4) < 0)
-		{
-			printf("Error writing the color palette to the output file\n");
-			exit(EXIT_FAILURE);
-		}
+		if(write(outputFileDescriptor, &actualColor, 4) < 0)
+			errorMessage("writing the color palette to the output file");
 	}
+
+	printf("done\n");
 }
 
-void writeImage(int fd, uint8_t **pixel_data, int32_t width, int32_t height)
+void writeImage(int outputFileDescriptor, uint8_t **pixelData, int32_t width, int32_t height)
 {
-	int32_t oldwidth = width;
-	while(width % 4 != 0) width++;
-	for(int32_t column = oldwidth; column < width; column++)
-		for(int32_t row = 0; row < height; row++)
-			pixel_data[row][column] = COLOR_WHITE;
-	
-	writeHeader(fd, oldwidth, height);
-	writeInfoHeader(fd, oldwidth, height);
-	writeColorPalette(fd);
-	
+	printf("Writing the image to the output file...\n");
 	int32_t row, column;
+	int32_t unpaddedWidth = width;
+
+	while(width % 4 != 0) width++;
+	for(column = unpaddedWidth; column < width; column++)
+		for(row = 0; row < height; row++)
+			pixelData[row][column] = COLOR_WHITE;
+	
+	printf("\t");
+	writeHeader(outputFileDescriptor, unpaddedWidth, height);
+
+	printf("\t");
+	writeInfoHeader(outputFileDescriptor, unpaddedWidth, height);
+
+	printf("\t");
+	writeColorPalette(outputFileDescriptor);
 	
 	for(row = height - 1; row >= 0; row--)
+	{
+		if(row == height / 4)
+			printf("\t25%%\n");
+		else if(row == height / 2)
+			printf("\t50%%\n");
+		else if(row == 3 * height / 4)
+			printf("\t75%%\n");
+		
 		for(column = 0; column < width; column++)
-			if(write(fd, &pixel_data[row][column], sizeof(pixel_data[row][column])) < 0)
-			{
-				printf("Error writing the pixel data to the output file\n");
-				exit(EXIT_FAILURE);
-			}
+			if(write(outputFileDescriptor, &pixelData[row][column], sizeof(pixelData[row][column])) < 0)
+				errorMessage("writing the pixel data to the output file");
+	}
+	printf("\t100%%\n");
 }

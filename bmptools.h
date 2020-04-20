@@ -13,6 +13,8 @@
 #define COLOR_BLACK	0
 #define COLOR_WHITE	255
 
+void errorMessage(char *err);
+
 void writeHeader(int fd, int32_t width, int32_t height);
 void writeInfoHeader(int fd, int32_t width, int32_t height);
 void writeColorPalette(int fd);
