@@ -9,391 +9,389 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include "cella.h"
 #include "bmptools.h"
+#include "utils.h"
 
-#define TRUE	1u
-#define FALSE	0u
+struct cella_configuration_st {
+	uint8_t	forceWidth_u8;
+	int32_t	forcedWidth_s32;
 
-#define U8_ARR_LENGTH(arr) (uint8_t)((sizeof(arr))/(sizeof((arr)[0])))
+	uint8_t	forceHeight_u8;
+	int32_t	forcedHeight_s32;
 
-#define DEFAULT_WIDTH		100
-#define DEFAULT_HEIGHT		100
-#define DEFAULT_RULE		30
+	uint8_t	forceOutputName_u8;
+	char	*forcedOutputName_pc;
 
-#define FIRST_ROW		0
-#define FIRST_COLUMN	0
+	uint8_t	forceIterations_u8;
+	uint32_t forcedIterations_u32;
 
-typedef struct{
-	uint8_t	force_width;
-	int32_t	f_width;
+	uint8_t forceSeed_u8;
+	char	seedPosition_c;
+	char	*forcedSeed_pc;
 
-	uint8_t	force_height;
-	int32_t	f_height;
+	uint8_t	forceRule_u8;
+	uint8_t	forcedRule_u8;
+};
 
-	uint8_t	force_output_name;
-	char	*f_output_file;
+cella_configuration_t	cella_Configuration_t = {0};
 
-	uint8_t	force_iterations;
-	uint8_t f_iterations;
-
-	uint8_t force_seed;
-	char	seedPos;
-	char	*f_seed;
-
-	uint8_t	force_rule;
-	uint8_t	f_rule;
-} config_t;
-
-void errorMessage(char *err);
-
-void initialize(int argc, char *argv[]);
-void parseParameters(int argc, char *argv[]);
-void determineRule();
-void determineImageDimensions();
-void determineSeed();
-void determineIterations();
-void allocatePixelData();
-void initializePixelData();
-void determineOutputFileName();
-void openOutputFile();
-
-void	runSimulation();
-uint8_t	computeCell(int32_t row, int32_t column);
-uint8_t	computeRuleResult(uint8_t northWest, uint8_t north, uint8_t northEast);
-
-void terminate();
-void closeOutputFile();
-void freeMemory();
-
-config_t	configuration = {0};
-int32_t		width, height;
-char		*outputFileName;
-int			outputFileDescriptor;
-uint32_t	iterations;
-uint8_t		*seed;
-int32_t		seedLength;
-uint8_t		**pixelData;
-uint8_t		rule[8];
+int32_t		cella_ImageWidth_s32, cella_ImageHeight_s32;
+char		*cella_OutputFileName_pc;
+int			cella_OutputFileDescriptor_fd;
+uint32_t	cella_NumberOfIterations_u32;
+uint8_t		*cella_Seed_pu8;
+int32_t		cella_SeedLength_s32;
+uint8_t		**cella_PixelData_ppu8;
+uint8_t		cella_Rule_au8[8];
 
 int main(int argc, char *argv[])
-{	
-	initialize(argc, argv);
+{
+	cella_Initialize(argc, argv);
 
-	runSimulation();
+	cella_RunSimulation();
 
-	writeImage(outputFileDescriptor, pixelData, width, height);
+	bmp_WriteImage(cella_OutputFileDescriptor_fd, cella_PixelData_ppu8, cella_ImageWidth_s32, cella_ImageHeight_s32);
 
-	terminate();
+	cella_Terminate();
 	
 	return 0;
 }
 
-/****** BEGIN INITIALIZE ******/
-void initialize(int argc, char *argv[])
+/**************** BEGIN INITIALIZE ****************/
+void cella_Initialize(int argc, char *argv[])
 {
-	printf("Initializing... \n");
+	printf("Initializing...\n");
 
 	printf("\t");
-	parseParameters(argc, argv);
+	cella_ParseParameters(argc, argv);
 	
 	printf("\t");
-	determineRule();
+	cella_DetermineRule();
 
 	printf("\t");
-	determineImageDimensions();
+	cella_DetermineImageDimensions();
 
 	printf("\t");
-	determineSeed();
+	cella_DetermineSeed();
 
 	printf("\t");
-	determineIterations();
+	cella_DetermineIterations();
 
 	printf("\t");
-	allocatePixelData();
+	cella_AllocatePixelData();
 
 	printf("\t");
-	initializePixelData();
+	cella_InitializePixelData();
 
 	printf("\t");
-	determineOutputFileName();
+	cella_DetermineOutputFileName();
 
 	printf("\t");
-	openOutputFile();
+	cella_OpenOutputFile();
 }
 
-void parseParameters(int argc, char *argv[])
+static void cella_ParseParameters(int argc, char *argv[])
 {
 	printf("Parsing the parameters... ");
 
-	uint8_t arg_index;
+	uint8_t argIndex_u8;
 
-	for(arg_index = 1; arg_index < argc; arg_index += 2)
-		switch(argv[arg_index][1])
+	for(argIndex_u8 = 1; argIndex_u8 < argc; argIndex_u8 += 2)
+		switch(argv[argIndex_u8][1])
 		{
 			case 'w':
-				configuration.force_width = TRUE;
-				configuration.f_width = atoi(argv[arg_index + 1]);
+				cella_Configuration_t.forceWidth_u8 = TRUE;
+				cella_Configuration_t.forcedWidth_s32 = atoi(argv[argIndex_u8 + 1]);
 				break;
 			case 'h':
-				configuration.force_height = TRUE;
-				configuration.f_height = atoi(argv[arg_index + 1]);
+				cella_Configuration_t.forceHeight_u8 = TRUE;
+				cella_Configuration_t.forcedHeight_s32 = atoi(argv[argIndex_u8 + 1]);
 				break;
 			case 'o':
-				configuration.force_output_name = TRUE;
-				configuration.f_output_file = argv[arg_index + 1];
+				cella_Configuration_t.forceOutputName_u8 = TRUE;
+				cella_Configuration_t.forcedOutputName_pc = argv[argIndex_u8 + 1];
 				break;
 			case 'i':
-				configuration.force_iterations = TRUE;
-				configuration.f_iterations = atoi(argv[arg_index + 1]);
+				cella_Configuration_t.forceIterations_u8 = TRUE;
+				cella_Configuration_t.forcedIterations_u32 = atoi(argv[argIndex_u8 + 1]);
 				break;
 			case 's':
-				switch(argv[arg_index + 1][0])
+				switch(argv[argIndex_u8 + 1][0])
 				{
 					case 'l': case 'L':
-						configuration.seedPos = 'l';
+						cella_Configuration_t.seedPosition_c = 'l';
 						break;
 					case 'r': case 'R':
-						configuration.seedPos = 'r';
+						cella_Configuration_t.seedPosition_c = 'r';
 						break;
 					case 'c': case 'C':
-						configuration.seedPos = 'c';
+						cella_Configuration_t.seedPosition_c = 'c';
 						break;
 					default:
-						configuration.force_seed = TRUE;
-						configuration.f_seed = argv[arg_index + 1];
+						cella_Configuration_t.forceSeed_u8 = TRUE;
+						cella_Configuration_t.forcedSeed_pc = argv[argIndex_u8 + 1];
 						break;
 				}
 				break;
 			case 'r':
-				configuration.force_rule = TRUE;
-				configuration.f_rule = atoi(argv[arg_index + 1]);
+				cella_Configuration_t.forceRule_u8 = TRUE;
+				cella_Configuration_t.forcedRule_u8 = atoi(argv[argIndex_u8 + 1]);
 				break;
 			default:
-				errorMessage("invalid parameter");
+				utils_errorMessage("invalid parameter");
 				break;
 		}
 	
 	printf("done\n");
 }
 
-void determineRule()
+static void cella_DetermineRule(void)
 {
 	printf("Determining the rule... ");
 
-	uint8_t currentRule;
-	if(TRUE == configuration.force_rule)
-		currentRule = configuration.f_rule;
-	else
-		currentRule = DEFAULT_RULE;
+	uint8_t currentRule_u8;
 
-	for(int32_t count = 7; count >= 0; count--)
+	if(TRUE == cella_Configuration_t.forceRule_u8)
+		currentRule_u8 = cella_Configuration_t.forcedRule_u8;
+	else
+		currentRule_u8 = CELLA_DEFAULT_RULE;
+
+	for(int8_t count_s8 = 7; count_s8 >= 0; count_s8--)
 	{
-		rule[count] = (currentRule % 2 != 0) ? COLOR_BLACK : COLOR_WHITE;
-		currentRule /= 2;
+		cella_Rule_au8[count_s8] = (currentRule_u8 % 2 != 0) ? COLOR_BLACK : COLOR_WHITE;
+		currentRule_u8 /= 2;
 	}
 
 	printf("done\n");
 }
 
-void determineImageDimensions()
+static void cella_DetermineImageDimensions(void)
 {
 	printf("Determining the image dimensions... ");
 
-	if(TRUE == configuration.force_width)
-		width = configuration.f_width;
+	if(TRUE == cella_Configuration_t.forceWidth_u8)
+		cella_ImageWidth_s32 = cella_Configuration_t.forcedWidth_s32;
 	else
-		width = DEFAULT_WIDTH;
+		cella_ImageWidth_s32 = CELLA_DEFAULT_WIDTH;
 	
-	if(TRUE == configuration.force_height)
-		height = configuration.f_height;
+	if(TRUE == cella_Configuration_t.forceHeight_u8)
+		cella_ImageHeight_s32 = cella_Configuration_t.forcedHeight_s32;
 	else
-		height = DEFAULT_HEIGHT;
+		cella_ImageHeight_s32 = CELLA_DEFAULT_HEIGHT;
 
 	printf("done\n");
 }
 
-void determineSeed()
+static void cella_DetermineSeed(void)
 {
 	printf("Determining the seed... ");
 
-	int32_t index;
+	int32_t index_s32;
 
-	if(TRUE == configuration.force_seed)
+	if(TRUE == cella_Configuration_t.forceSeed_u8)
 	{
-		seed = (uint8_t *)malloc(strlen(configuration.f_seed) * sizeof(uint8_t));
-		seedLength = strlen(configuration.f_seed);
+		cella_SeedLength_s32 = strlen(cella_Configuration_t.forcedSeed_pc);
+		cella_Seed_pu8 = (uint8_t *)malloc(cella_SeedLength_s32 * sizeof(uint8_t));
 
-		for(index = 0; index < strlen(configuration.f_seed); index++)
-			seed[index] = (configuration.f_seed[index] == '0') ? COLOR_WHITE : COLOR_BLACK;
+		for(index_s32 = 0; index_s32 < cella_SeedLength_s32; index++)
+			cella_Seed_pu8[index_s32] = (cella_Configuration_t.forcedSeed_pc[index_s32] == '0') ? COLOR_WHITE : COLOR_BLACK;
 	}
 	else
 	{
-		seed = (uint8_t *)malloc(width * sizeof(uint8_t));
-		seedLength = width;
+		cella_SeedLength_s32 = cella_ImageWidth_s32;
+		cella_Seed_pu8 = (uint8_t *)malloc(cella_SeedLength_s32 * sizeof(uint8_t));
 
-		for(index = 0; index < width; index++)
-			if(	('l' == configuration.seedPos && FIRST_COLUMN == index) || 
-				('r' == configuration.seedPos && width - 1 == index) || 
-				('l' != configuration.seedPos && 'r' != configuration.seedPos && ((width + 1) / 2) == index))
-				seed[index] = COLOR_BLACK;
+		uint8 condition_u8;
+		for(index_s32 = CELLA_FIRST_COLUMN; index_s32 < cella_ImageWidth_s32; index_s32++)
+		{
+			condition_u8 = FALSE;
+			condition_u8 |= 'l' == cella_Configuration_t.seedPosition_c && CELLA_FIRST_COLUMN == index_s32;
+			condition_u8 |= 'r' == cella_Configuration_t.seedPosition_c && cella_ImageWidth_s32 - 1 == index_s32;
+			condition_u8 |= 'l' != cella_Configuration_t.seedPosition_c &&
+							'r' != cella_Configuration_t.seedPosition_c &&
+							((cella_ImageWidth_s32 + 1) / 2) == index_s32);
+			
+			if(TRUE == condition_u8)
+				cella_Seed_pu8[index_s32] = COLOR_BLACK;
 			else
-				seed[index] = COLOR_WHITE;
+				cella_Seed_pu8[index_s32] = COLOR_WHITE;
+		}
 	}
 	
 	printf("done\n");
 }
 
-void determineIterations()
+static void cella_DetermineIterations(void)
 {
-	printf("Determining iteration number... ");
+	printf("Determining the number of iterations... ");
 
-	if(TRUE == configuration.force_iterations)
-		iterations = configuration.f_iterations;
+	if(TRUE == cella_Configuration_t.forceIterations_u8)
+		cella_NumberOfIterations_u32 = cella_Configuration_t.forcedIterations_u32;
 	else
-		iterations = height;
+		cella_NumberOfIterations_u32 = cella_ImageHeight_s32;
 
 	printf("done\n");
 }
 
-void allocatePixelData()
+static void cella_AllocatePixelData(void)
 {
 	printf("Allocating pixel data... ");
 
-	pixelData = (uint8_t **)malloc(height * sizeof(uint8_t *));
+	cella_PixelData_ppu8 = (uint8_t **)malloc(cella_ImageHeight_s32 * sizeof(uint8_t *));
 
-	for(int32_t row = 0; row < height; row++)
-		pixelData[row] = (uint8_t *)malloc(width * sizeof(uint8_t));
+	for(int32_t row_s32 = CELLA_FIRST_ROW; row_s32 < cella_ImageHeight_s32; row_s32++)
+		cella_PixelData_ppu8[row_s32] = (uint8_t *)malloc(cella_ImageWidth_s32 * sizeof(uint8_t));
 	
 	printf("done\n");
 }
 
-void initializePixelData()
+static void cella_InitializePixelData(void)
 {
 	printf("Initializing pixel data... ");
 
-	int32_t row, column;
+	int32_t row_s32, column_s32;
 
-	for(row = 0; row < height; row++)
-		for(column = 0; column < width; column++)
-			pixelData[row][column] = COLOR_WHITE;
+	for(row_s32 = CELLA_FIRST_ROW; row_s32 < cella_ImageHeight_s32; row_s32++)
+		for(column_s32 = CELLA_FIRST_COLUMN; column_s32 < cella_ImageWidth_s32; column_s32++)
+			cella_PixelData_ppu8[row_s32][column_s32] = COLOR_WHITE;
 	
-	for(column = 0; column < seedLength; column++)
-		pixelData[FIRST_ROW][column] = seed[column];
+	int32_t seedCenter_s32 = cella_ImageWidth_s32 / 2 - cella_SeedLength_s32 / 2 - 1;
+	for(column_s32 = seedCenter_s32; column_s32 < seedCenter_s32 + cella_SeedLength_s32; column_s32++)
+		cella_PixelData_ppu8[CELLA_FIRST_ROW][column_s32] = cella_Seed_pu8[column_s32 - seedCenter_s32];
 	
 	printf("done\n");
 }
 
-void determineOutputFileName()
+static void cella_DetermineOutputFileName(void)
 {
 	printf("Determining output file name... ");
 
-	if(TRUE == configuration.force_output_name)
-	{
-		outputFileName = (char *)malloc(strlen(configuration.f_output_file) * sizeof(char));
+	int32_t outputFileNameLength_s32;
 
-		outputFileName = configuration.f_output_file;
+	if(TRUE == cella_Configuration_t.forceOutputName_u8)
+	{
+		outputFileNameLength_s32 = strlen(cella_Configuration_t.forcedOutputName_pc);
+
+		cella_OutputFileName_pc = (char *)malloc(outputFileNameLength_s32 * sizeof(char));
+
+		for(int32_t index_s32 = 0; index_s32 < outputFileNameLength_s32; index_s32++)
+			cella_OutputFileName_pc[index_s32] = cella_Configuration_t.forcedOutputName_pc[index_s32];
 	}
 	else
 	{
-		outputFileName = (char *)malloc(18 * sizeof(char));
-		strcpy(outputFileName, "output_");
+		char buf_ac[32];
+		time_t currentTime_t = time(0);
+		struct tm* currentTimeInfo_st = localtime(&currentTime_t);
+		sprintf(buf_ac, "output_%02d%02d%02d.bmp",
+				currentTimeInfo_st -> tm_hour, currentTimeInfo_st -> tm_min, currentTimeInfo_st -> tm_sec);
+		
+		outputFileNameLength_s32 = strlen(buf_ac);
 
-		time_t currentTime = time(0);
-		struct tm* currentTimeInfo = localtime(&currentTime);
-		char buf[7];
-		sprintf(buf, "%02d%02d%02d", currentTimeInfo -> tm_hour, currentTimeInfo -> tm_min, currentTimeInfo -> tm_sec);
-		strcat(outputFileName, buf);
+		cella_OutputFileName_pc = (char *)malloc(outputFileNameLength_s32 * sizeof(char));
 
-		strcat(outputFileName, ".bmp");
+		for(int32_t index_s32 = 0; index_s32 < outputFileNameLength_s32; index_s32++)
+			cella_OutputFileName_pc[index_s32] = buf_ac[index_s32];
 	}
 
 	printf("done\n");
 }
 
-void openOutputFile()
+static void cella_OpenOutputFile(void)
 {
 	printf("Creating output file... ");
 
-	if((outputFileDescriptor = open(outputFileName, O_CREAT | O_WRONLY | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO)) < 0)
+	cella_OutputFileDescriptor_fd = open(cella_OutputFileName_pc, O_CREAT | O_WRONLY | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
+	if(cella_OutputFileDescriptor_fd < 0)
 		errorMessage("creating output file");
 	
 	printf("done\n");
 }
-/****** END INITIALIZE ******/
+/**************** END INITIALIZE ****************/
 
-/****** BEGIN SIMULATION ******/
-void runSimulation()
+/**************** BEGIN SIMULATION ****************/
+void cella_RunSimulation(void)
 {
 	printf("Running simulation...\n");
-	int32_t row, column;
 
-	for(row = 1; row < iterations; row++)
+	int32_t row_s32, column_s32;
+
+	for(row_s32 = 1; row_s32 < cella_NumberOfIterations_u32; row_s32++)
 	{
-		if(row == iterations / 4)
+		if(row_s32 == cella_NumberOfIterations_u32 / 4)
 			printf("\t25%%\n");
-		else if(row == iterations / 2)
+		else if(row_s32 == cella_NumberOfIterations_u32 / 2)
 			printf("\t50%%\n");
-		else if(row == 3 * iterations / 4)
+		else if(row_s32 == 3 * cella_NumberOfIterations_u32 / 4)
 			printf("\t75%%\n");
 		
-		for(column = 0; column < width; column++)
-			pixelData[row][column] = computeCell(row, column);
+		for(column_s32 = CELLA_FIRST_COLUMN; column_s32 < cella_ImageWidth_s32; column_s32++)
+			cella_PixelData_ppu8[row_s32][column_s32] = cella_ComputeCell(row_s32, column_s32);
 	}
 	printf("\t100%%\n");
 }
 
-uint8_t computeCell(int32_t row, int32_t column)
+static uint8_t cella_ComputeCell(int32_t row_s32, int32_t column_s32)
 {
-	if(FIRST_COLUMN == column)
-		return computeRuleResult(pixelData[row - 1][width - 1], pixelData[row - 1][column], pixelData[row - 1][column + 1]);
-	else if(column == width - 1)
-		return computeRuleResult(pixelData[row - 1][column - 1], pixelData[row - 1][column], pixelData[row - 1][FIRST_COLUMN]);
+	uint8_t northWest_u8, north_u8, northEast_u8;
+
+	if(CELLA_FIRST_COLUMN == column_s32)
+		northWest_u8 = cella_PixelData_ppu8[row_s32 - 1][cella_ImageWidth_s32 - 1];
 	else
-		return computeRuleResult(pixelData[row - 1][column - 1], pixelData[row - 1][column], pixelData[row - 1][column + 1]);
+		northWest_u8 = cella_PixelData_ppu8[row_s32 - 1][column_s32 - 1];
+	
+	north_u8 = cella_PixelData_ppu8[row_s32 - 1][column_s32];
+
+	if(column_s32 == cella_ImageWidth_s32 - 1)
+		northEast_u8 = cella_PixelData_ppu8[row_s32 - 1][CELLA_FIRST_COLUMN];
+	else
+		northEast_u8 = cella_PixelData_ppu8[row_s32 - 1][column_s32 + 1];
+	
+	return cella_ComputeRuleResult(northWest_u8, north_u8, northEast_u8);
 }
 
-uint8_t computeRuleResult(uint8_t northWest, uint8_t north, uint8_t northEast)
+static uint8_t cella_ComputeRuleResult(uint8_t northWest_u8, uint8_t north_u8, uint8_t northEast_u8)
 {
 	uint8_t index = 0;
 
-	if(COLOR_WHITE != northEast)	index |= 1;
-	if(COLOR_WHITE != north)		index |= 2;
-	if(COLOR_WHITE != northWest)	index |= 4;
+	if(COLOR_WHITE != northEast_u8)	index |= 1;
+	if(COLOR_WHITE != north_u8)		index |= 2;
+	if(COLOR_WHITE != northWest_u8)	index |= 4;
 	
-	return rule[7 - index];
+	return cella_Rule_au8[7 - index];
 }
-/****** END SIMULATION ******/
+/**************** END SIMULATION ****************/
 
-/****** BEGIN TERMINATE ******/
-void terminate()
+/**************** BEGIN TERMINATE ****************/
+void cella_Terminate(void)
 {
 	printf("Terminating program... \n");
 
 	printf("\t");
-	closeOutputFile();
+	cella_CloseOutputFile();
 
 	printf("\t");
-	freeMemory();
+	cella_FreeMemory();
 }
 
-void closeOutputFile()
+static void cella_CloseOutputFile(void)
 {
 	printf("Closing output file... ");
 
-	if(close(outputFileDescriptor) < 0)
+	if(close(cella_OutputFileDescriptor_fd) < 0)
 		errorMessage("closing output file");
 	
 	printf("done\n");
 }
 
-void freeMemory()
+static void cella_FreeMemory(void)
 {
 	printf("Freeing allocated memory... ");
 
-	//free(outputFileName);
-	free(seed);
-	free(pixelData);
+	free(cella_OutputFileName_pc);
+	free(cella_Seed_pu8);
+	free(cella_PixelData_ppu8);
 
 	printf("done\n");
 }
-/****** END TERMINATE ******/
+/**************** END TERMINATE ****************/
