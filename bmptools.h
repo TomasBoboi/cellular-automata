@@ -19,10 +19,6 @@
 typedef struct bmp_BitmapFileHeader_st bmp_BitmapFileHeader_t;
 typedef struct bmp_BitmapInfoHeader_st bmp_BitmapInfoHeader_t;
 
-static void bmp_WriteFileHeader(int outputFileDescriptor_fd, int32_t imageWidth_s32, int32_t imageHeight_s32);
-static void bmp_WriteInfoHeader(int outputFileDescriptor_fd, int32_t imageWidth_s32, int32_t imageHeight_s32);
-static void bmp_WriteColorPalette(int outputFileDescriptor_fd);
-
 void bmp_WriteImage(int outputFileDescriptor_fd, uint8_t **pixelData_ppu8, int32_t imageWidth_s32, int32_t imageHeight_s32);
 
 #endif /* BMPTOOLS_H */

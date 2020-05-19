@@ -34,6 +34,22 @@ struct cella_configuration_st {
 	uint8_t	forcedRule_u8;
 };
 
+static void cella_ParseParameters(int argc, char *argv[]);
+static void cella_DetermineRule(void);
+static void cella_DetermineImageDimensions(void);
+static void cella_DetermineSeed(void);
+static void cella_DetermineIterations(void);
+static void cella_AllocatePixelData(void);
+static void cella_InitializePixelData(void);
+static void cella_DetermineOutputFileName(void);
+static void cella_OpenOutputFile(void);
+
+static uint8_t cella_ComputeCell(int32_t row_s32, int32_t column_s32);
+static uint8_t cella_ComputeRuleResult(uint8_t northWest_u8, uint8_t north_u8, uint8_t northEast_u8);
+
+static void cella_CloseOutputFile(void);
+static void cella_FreeMemory(void);
+
 cella_configuration_t	cella_Configuration_t = {0};
 
 int32_t		cella_ImageWidth_s32, cella_ImageHeight_s32;
@@ -139,7 +155,7 @@ static void cella_ParseParameters(int argc, char *argv[])
 				cella_Configuration_t.forcedRule_u8 = atoi(argv[argIndex_u8 + 1]);
 				break;
 			default:
-				utils_errorMessage("invalid parameter");
+				utils_ErrorMessage("invalid parameter");
 				break;
 		}
 	
@@ -159,7 +175,7 @@ static void cella_DetermineRule(void)
 
 	for(int8_t count_s8 = 7; count_s8 >= 0; count_s8--)
 	{
-		cella_Rule_au8[count_s8] = (currentRule_u8 % 2 != 0) ? COLOR_BLACK : COLOR_WHITE;
+		cella_Rule_au8[count_s8] = (currentRule_u8 % 2 != 0) ? BMP_COLOR_BLACK : BMP_COLOR_WHITE;
 		currentRule_u8 /= 2;
 	}
 
@@ -194,15 +210,15 @@ static void cella_DetermineSeed(void)
 		cella_SeedLength_s32 = strlen(cella_Configuration_t.forcedSeed_pc);
 		cella_Seed_pu8 = (uint8_t *)malloc(cella_SeedLength_s32 * sizeof(uint8_t));
 
-		for(index_s32 = 0; index_s32 < cella_SeedLength_s32; index++)
-			cella_Seed_pu8[index_s32] = (cella_Configuration_t.forcedSeed_pc[index_s32] == '0') ? COLOR_WHITE : COLOR_BLACK;
+		for(index_s32 = 0; index_s32 < cella_SeedLength_s32; index_s32++)
+			cella_Seed_pu8[index_s32] = (cella_Configuration_t.forcedSeed_pc[index_s32] == '0') ? BMP_COLOR_WHITE : BMP_COLOR_BLACK;
 	}
 	else
 	{
 		cella_SeedLength_s32 = cella_ImageWidth_s32;
-		cella_Seed_pu8 = (uint8_t *)malloc(cella_SeedLength_s32 * sizeof(uint8_t));
+		cella_Seed_pu8 = (uint8_t *)malloc(cella_ImageWidth_s32 * sizeof(uint8_t));
 
-		uint8 condition_u8;
+		uint8_t condition_u8;
 		for(index_s32 = CELLA_FIRST_COLUMN; index_s32 < cella_ImageWidth_s32; index_s32++)
 		{
 			condition_u8 = FALSE;
@@ -210,12 +226,12 @@ static void cella_DetermineSeed(void)
 			condition_u8 |= 'r' == cella_Configuration_t.seedPosition_c && cella_ImageWidth_s32 - 1 == index_s32;
 			condition_u8 |= 'l' != cella_Configuration_t.seedPosition_c &&
 							'r' != cella_Configuration_t.seedPosition_c &&
-							((cella_ImageWidth_s32 + 1) / 2) == index_s32);
+							(((cella_ImageWidth_s32 + 1) / 2) == index_s32);
 			
 			if(TRUE == condition_u8)
-				cella_Seed_pu8[index_s32] = COLOR_BLACK;
+				cella_Seed_pu8[index_s32] = BMP_COLOR_BLACK;
 			else
-				cella_Seed_pu8[index_s32] = COLOR_WHITE;
+				cella_Seed_pu8[index_s32] = BMP_COLOR_WHITE;
 		}
 	}
 	
@@ -229,7 +245,7 @@ static void cella_DetermineIterations(void)
 	if(TRUE == cella_Configuration_t.forceIterations_u8)
 		cella_NumberOfIterations_u32 = cella_Configuration_t.forcedIterations_u32;
 	else
-		cella_NumberOfIterations_u32 = cella_ImageHeight_s32;
+		cella_NumberOfIterations_u32 = cella_ImageHeight_s32 - 1;
 
 	printf("done\n");
 }
@@ -254,9 +270,14 @@ static void cella_InitializePixelData(void)
 
 	for(row_s32 = CELLA_FIRST_ROW; row_s32 < cella_ImageHeight_s32; row_s32++)
 		for(column_s32 = CELLA_FIRST_COLUMN; column_s32 < cella_ImageWidth_s32; column_s32++)
-			cella_PixelData_ppu8[row_s32][column_s32] = COLOR_WHITE;
+			cella_PixelData_ppu8[row_s32][column_s32] = BMP_COLOR_WHITE;
 	
-	int32_t seedCenter_s32 = cella_ImageWidth_s32 / 2 - cella_SeedLength_s32 / 2 - 1;
+	int32_t seedCenter_s32;
+	if(TRUE == cella_Configuration_t.forceSeed_u8)
+		seedCenter_s32 = cella_ImageWidth_s32 / 2 - cella_SeedLength_s32 / 2;
+	else
+		seedCenter_s32 = 0;
+
 	for(column_s32 = seedCenter_s32; column_s32 < seedCenter_s32 + cella_SeedLength_s32; column_s32++)
 		cella_PixelData_ppu8[CELLA_FIRST_ROW][column_s32] = cella_Seed_pu8[column_s32 - seedCenter_s32];
 	
@@ -303,7 +324,7 @@ static void cella_OpenOutputFile(void)
 
 	cella_OutputFileDescriptor_fd = open(cella_OutputFileName_pc, O_CREAT | O_WRONLY | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
 	if(cella_OutputFileDescriptor_fd < 0)
-		errorMessage("creating output file");
+		utils_ErrorMessage("creating output file");
 	
 	printf("done\n");
 }
@@ -354,9 +375,9 @@ static uint8_t cella_ComputeRuleResult(uint8_t northWest_u8, uint8_t north_u8, u
 {
 	uint8_t index = 0;
 
-	if(COLOR_WHITE != northEast_u8)	index |= 1;
-	if(COLOR_WHITE != north_u8)		index |= 2;
-	if(COLOR_WHITE != northWest_u8)	index |= 4;
+	if(BMP_COLOR_WHITE != northEast_u8)	index |= 1;
+	if(BMP_COLOR_WHITE != north_u8)		index |= 2;
+	if(BMP_COLOR_WHITE != northWest_u8)	index |= 4;
 	
 	return cella_Rule_au8[7 - index];
 }
@@ -379,7 +400,7 @@ static void cella_CloseOutputFile(void)
 	printf("Closing output file... ");
 
 	if(close(cella_OutputFileDescriptor_fd) < 0)
-		errorMessage("closing output file");
+		utils_ErrorMessage("closing output file");
 	
 	printf("done\n");
 }
@@ -390,6 +411,9 @@ static void cella_FreeMemory(void)
 
 	free(cella_OutputFileName_pc);
 	free(cella_Seed_pu8);
+	
+	for(int32_t index_s32 = 0; index_s32 < cella_ImageHeight_s32; index_s32++)
+		free(cella_PixelData_ppu8[index_s32]);
 	free(cella_PixelData_ppu8);
 
 	printf("done\n");
